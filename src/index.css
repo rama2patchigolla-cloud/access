@@ -1,0 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-nyu-violet: #57068C;
+  --color-nyu-violet-hover: #400468;
+  --color-nyu-violet-light: #7E1CBA;
+  --color-nyu-violet-bg: #F5EEF9;
+  --color-nyu-violet-accent: #E5D5EF;
+}
+
+@layer base {
+  body {
+    @apply font-sans antialiased bg-[#FDFDFD] text-slate-900;
+  }
+}
+
+.selection\:bg-nyu-violet-accent *::selection {
+  background-color: #E5D5EF;
+}
