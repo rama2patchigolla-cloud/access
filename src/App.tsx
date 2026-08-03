@@ -21,7 +21,13 @@ import {
   LayoutDashboard,
   Server,
   Cloud,
-  FileText
+  FileText,
+  Link2,
+  X,
+  Copy,
+  Check,
+  Search,
+  RefreshCw
 } from 'lucide-react';
 
 // --- Types ---
@@ -734,9 +740,426 @@ const UserPortal = ({ questions }: { questions: Question[] }) => {
   );
 };
 
+// --- Query Parameters Popup Modal ---
+
+interface QueryParamItem {
+  key: string;
+  value: string;
+}
+
+const QueryParamsModal = ({ 
+  isOpen, 
+  onClose, 
+  params, 
+  onRefresh 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  params: QueryParamItem[]; 
+  onRefresh: () => void;
+}) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState<'table' | 'json' | 'raw'>('table');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [copiedAll, setCopiedAll] = useState(false);
+  const [newKey, setNewKey] = useState('');
+  const [newValue, setNewValue] = useState('');
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const queryString = typeof window !== 'undefined' ? window.location.search : '';
+
+  const filteredParams = params.filter(
+    p => p.key.toLowerCase().includes(searchTerm.toLowerCase()) || 
+         p.value.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(id);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const copyAllAsJson = () => {
+    const obj: Record<string, string> = {};
+    params.forEach(p => { obj[p.key] = p.value; });
+    navigator.clipboard.writeText(JSON.stringify(obj, null, 2));
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 2000);
+  };
+
+  const handleAddSampleParams = () => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('netid', 'vp2165');
+    url.searchParams.set('dept', 'EDM_Data_Governance');
+    url.searchParams.set('app', 'NYU_Academic_Grants_Portal');
+    url.searchParams.set('segment', 'IT_Application_Integration');
+    url.searchParams.set('sensitivity', 'Sensitive_FERPA');
+    url.searchParams.set('steward_approved', 'true');
+    window.history.pushState({}, '', url.toString());
+    onRefresh();
+  };
+
+  const handleAddCustomParam = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newKey.trim() || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set(newKey.trim(), newValue.trim());
+    window.history.pushState({}, '', url.toString());
+    setNewKey('');
+    setNewValue('');
+    onRefresh();
+  };
+
+  const handleClearAllParams = () => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.search = '';
+    window.history.pushState({}, '', url.toString());
+    onRefresh();
+  };
+
+  const handleRemoveParam = (keyToRemove: string) => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete(keyToRemove);
+    window.history.pushState({}, '', url.toString());
+    onRefresh();
+  };
+
+  const jsonObj = params.reduce((acc, curr) => {
+    acc[curr.key] = curr.value;
+    return acc;
+  }, {} as Record<string, string>);
+
+  return (
+    <AnimatePresence>
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" 
+        onClick={onClose}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="query-params-title"
+      >
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+          transition={{ duration: 0.2 }}
+          className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden text-slate-900"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-b border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-nyu-violet/10 text-nyu-violet rounded-xl flex items-center justify-center" aria-hidden="true">
+                <Link2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 id="query-params-title" className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  URL Query Parameters
+                  <span className="px-2 py-0.5 text-xs font-extrabold bg-nyu-violet text-white rounded-full">
+                    {params.length} {params.length === 1 ? 'param' : 'params'}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">Inspecting query parameters passed in active browser URL</p>
+              </div>
+            </div>
+
+            <button 
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+              aria-label="Close query parameters popup"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Modal Body */}
+          <div className="p-6 max-h-[70vh] overflow-y-auto space-y-5">
+            {/* Active URL Bar */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 overflow-hidden text-slate-600 font-mono text-[11px] truncate">
+                <span className="font-bold text-slate-400 uppercase tracking-wider shrink-0">Active URL:</span>
+                <span className="truncate text-nyu-violet font-semibold">{currentUrl}</span>
+              </div>
+              <button 
+                type="button"
+                onClick={() => copyToClipboard(currentUrl, 'full-url')}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-white border border-slate-200 hover:border-nyu-violet hover:text-nyu-violet rounded-lg transition-colors shrink-0 cursor-pointer shadow-2xs"
+              >
+                {copiedKey === 'full-url' ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-green-600" />
+                    <span className="text-green-600">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy URL</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Controls Bar */}
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+              {/* Search filter */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input 
+                  type="text"
+                  placeholder="Filter parameters by name or value..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-nyu-violet focus:ring-2 focus:ring-nyu-violet/15 bg-white text-slate-900"
+                />
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'table' ? 'bg-white text-nyu-violet shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Table View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('json')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'json' ? 'bg-white text-nyu-violet shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  JSON View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('raw')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'raw' ? 'bg-white text-nyu-violet shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Raw String
+                </button>
+              </div>
+            </div>
+
+            {/* Main Parameter View */}
+            {params.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-2xl space-y-4">
+                <div className="w-12 h-12 bg-nyu-violet-bg text-nyu-violet rounded-full flex items-center justify-center mx-auto">
+                  <Link2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-800">No Query Parameters Found in URL</h4>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    You can load sample NYU data onboarding parameters or add custom parameters below to test URL query handling.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddSampleParams}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-nyu-violet hover:bg-nyu-violet-hover rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Load Sample NYU Query Parameters
+                </button>
+              </div>
+            ) : (
+              <>
+                {viewMode === 'table' && (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold text-xs uppercase tracking-wider">
+                          <th className="py-3 px-4 w-5/12">Parameter Name (Key)</th>
+                          <th className="py-3 px-4">Value</th>
+                          <th className="py-3 px-4 w-20 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {filteredParams.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-6 text-center text-slate-400 text-xs italic">
+                              No query parameters match "{searchTerm}"
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredParams.map((p, idx) => (
+                            <tr key={`${p.key}-${idx}`} className="hover:bg-nyu-violet-bg/20 transition-colors">
+                              <td className="py-3 px-4 font-mono font-bold text-xs text-nyu-violet align-top break-all">
+                                {p.key}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-xs text-slate-800 align-top break-all bg-slate-50/60 rounded-md">
+                                {p.value}
+                              </td>
+                              <td className="py-3 px-4 align-top text-right shrink-0">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(p.value, `val-${idx}`)}
+                                    className="p-1.5 text-slate-400 hover:text-nyu-violet hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                    title="Copy Value"
+                                  >
+                                    {copiedKey === `val-${idx}` ? (
+                                      <Check className="w-3.5 h-3.5 text-green-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveParam(p.key)}
+                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Delete parameter from URL"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {viewMode === 'json' && (
+                  <div className="relative bg-slate-900 rounded-xl p-4 overflow-x-auto shadow-inner">
+                    <pre className="font-mono text-xs text-purple-200 leading-relaxed">
+                      {JSON.stringify(jsonObj, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {viewMode === 'raw' && (
+                  <div className="relative bg-slate-900 rounded-xl p-4 overflow-x-auto font-mono text-xs text-slate-200 break-all leading-relaxed shadow-inner">
+                    {queryString || 'No query string in URL'}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Quick Add / Update Parameter Form */}
+            <form onSubmit={handleAddCustomParam} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Add or Update URL Parameter</h5>
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                <input 
+                  type="text"
+                  placeholder="Key (e.g. netid)"
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value)}
+                  className="sm:col-span-2 p-2.5 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-nyu-violet text-slate-900"
+                />
+                <input 
+                  type="text"
+                  placeholder="Value (e.g. vp2165)"
+                  value={newValue}
+                  onChange={(e) => setNewValue(e.target.value)}
+                  className="sm:col-span-2 p-2.5 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-nyu-violet text-slate-900"
+                />
+                <button
+                  type="submit"
+                  disabled={!newKey.trim()}
+                  className={`p-2.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    newKey.trim() 
+                      ? 'bg-nyu-violet text-white hover:bg-nyu-violet-hover' 
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Param
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 bg-slate-50 border-t border-slate-200">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onRefresh}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:border-slate-300 rounded-lg transition-colors cursor-pointer shadow-2xs"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </button>
+              {params.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllParams}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-600 bg-white border border-red-200 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Clear All
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {params.length > 0 && (
+                <button
+                  type="button"
+                  onClick={copyAllAsJson}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-nyu-violet bg-nyu-violet-bg border border-nyu-violet-accent hover:bg-nyu-violet-accent/60 rounded-xl transition-colors cursor-pointer"
+                >
+                  {copiedAll ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedAll ? 'Copied JSON!' : 'Copy All as JSON'}</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-xl transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+};
+
 export default function App() {
   const [view, setView] = useState<'user' | 'admin'>('user');
   const [questions, setQuestions] = useState<Question[]>(INITIAL_QUESTIONS);
+  const [showQueryParamsModal, setShowQueryParamsModal] = useState(false);
+  const [queryParams, setQueryParams] = useState<QueryParamItem[]>([]);
+
+  const refreshParams = () => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const paramsList: QueryParamItem[] = [];
+      searchParams.forEach((value, key) => {
+        paramsList.push({ key, value });
+      });
+      setQueryParams(paramsList);
+    }
+  };
+
+  useEffect(() => {
+    refreshParams();
+    const handlePopState = () => refreshParams();
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#FAF9FC] text-slate-900 font-sans selection:bg-nyu-violet-accent">
@@ -763,27 +1186,55 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                <button 
+                  onClick={() => setView('user')}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
+                    view === 'user' ? 'bg-white text-nyu-violet shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <User className="w-4 h-4" /> User Portal
+                </button>
+                <button 
+                  onClick={() => setView('admin')}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
+                    view === 'admin' ? 'bg-white text-nyu-violet shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Settings className="w-4 h-4" /> Admin Bank
+                </button>
+              </div>
+
               <button 
-                onClick={() => setView('user')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
-                  view === 'user' ? 'bg-white text-nyu-violet shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
+                onClick={() => {
+                  refreshParams();
+                  setShowQueryParamsModal(true);
+                }}
+                className="flex items-center gap-2 px-3.5 py-2 text-sm font-bold text-slate-700 hover:text-nyu-violet bg-white border border-slate-200 hover:border-nyu-violet/40 rounded-xl shadow-xs hover:shadow-sm transition-all cursor-pointer"
+                title="View URL Query Parameters"
+                aria-label="View URL Query Parameters"
               >
-                <User className="w-4 h-4" /> User Portal
-              </button>
-              <button 
-                onClick={() => setView('admin')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
-                  view === 'admin' ? 'bg-white text-nyu-violet shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <Settings className="w-4 h-4" /> Admin Bank
+                <Link2 className="w-4 h-4 text-nyu-violet" />
+                <span className="hidden sm:inline">Query Params</span>
+                {queryParams.length > 0 && (
+                  <span className="bg-nyu-violet text-white text-[11px] font-extrabold px-2 py-0.5 rounded-full">
+                    {queryParams.length}
+                  </span>
+                )}
               </button>
             </div>
           </div>
         </div>
       </header>
+
+      {/* Query Parameters Popup Modal */}
+      <QueryParamsModal 
+        isOpen={showQueryParamsModal}
+        onClose={() => setShowQueryParamsModal(false)}
+        params={queryParams}
+        onRefresh={refreshParams}
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">

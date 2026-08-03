@@ -1,27 +1,42 @@
-name: Deploy to GitHub Pages
+name: Deploy React App to GitHub Pages
+
 on:
   push:
-    branches: [main]
+    branches:
+      - Params        # Set to 'main' (or your default branch)
+  workflow_dispatch: # Adds the manual "Run workflow" button!
+
 permissions:
   contents: read
   pages: write
   id-token: write
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm install
-      - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
+  build-and-deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
     steps:
-      - id: deployment
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
